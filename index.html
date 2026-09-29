@@ -899,7 +899,9 @@ function positionTip(clientX, clientY){
   box.style.transformOrigin='0 0';
   box.style.transform=(s>1.02)?('scale('+(1/s)+')'):'none';
 
+  var small=(s>1.05 || vv.w*s<=600);
   var maxH=Math.max(160, Math.min(window.innerHeight-20, vv.h*s-16));
+  if(small) maxH=Math.max(160, Math.round(vv.h*s*0.46));   /* mobile: tooltip திரையின் கீழ் 46%-க்குள் மட்டும்; மேலே வரைபடம் தெரியும் */
   box.style.maxHeight=maxH+'px';
   var body=document.getElementById('tipBody');
   body.style.maxHeight=Math.max(90, maxH-52)+'px';
@@ -909,7 +911,7 @@ function positionTip(clientX, clientY){
   var effW=bw/s, effH=bh/s, pad=8/s;
 
   var x, y;
-  if(s>1.05 || vv.w*s<=600){
+  if(small){
     x=vv.x+(vv.w-effW)/2;
     y=vv.y+vv.h-effH-pad;
   } else if(clientX==null && clientY==null){
@@ -1173,7 +1175,15 @@ function initMap(){
   img.addEventListener('load', ready);
   img.addEventListener('error', failed);
   if(img.complete){ if(img.naturalWidth) ready(); else failed(); }
-  window.addEventListener('resize', function(){ _baseW=0; var z=zoomSc; zoomSc=1; applyZoom(); if(z>1.0001){ zoomSc=z; applyZoom(); } });
+  var _lastW=document.getElementById('wrapper').clientWidth;
+  window.addEventListener('resize', function(){
+    var w=document.getElementById('wrapper');
+    if(w.clientWidth===_lastW){ fitWrapperHeight(); return; }   /* mobile keyboard: அகலம் மாறவில்லை → zoom/scroll அப்படியே */
+    _lastW=w.clientWidth;
+    var fx=(w.scrollLeft+w.clientWidth/2)/Math.max(1,w.scrollWidth), fy=(w.scrollTop+w.clientHeight/2)/Math.max(1,w.scrollHeight);
+    _baseW=w.clientWidth; applyZoom();
+    w.scrollLeft=fx*w.scrollWidth-w.clientWidth/2; w.scrollTop=fy*w.scrollHeight-w.clientHeight/2;
+  });
   initGestures();
 
   document.querySelectorAll('#Map area').forEach(function(a){
@@ -1217,6 +1227,11 @@ function highlightPlot(plotNum){
 /* select from results panel: zoom into the plot + show tooltip
    (coords இன்னும் நிரப்பப்படாத பிளாட்டிற்கு zoom இல்லாமல் tooltip மட்டும் காட்டும்) */
 window.selectPlot=function(plotNum){
+  var inp=document.getElementById('searchInput');
+  if(inp && document.activeElement===inp){ inp.blur(); setTimeout(function(){ selectPlotNow(plotNum); },200); return; }
+  selectPlotNow(plotNum);
+};
+function selectPlotNow(plotNum){
   document.querySelectorAll('.result-item').forEach(function(el){
     el.classList.toggle('selected-result',(el.getAttribute('data-plot')===String(plotNum)));
   });
@@ -1247,15 +1262,17 @@ window.selectPlot=function(plotNum){
   var spp=scaledW/COORD_W;
   setTimeout(function(){
     /* Desktop-ல் tooltip இடப்பக்கம் வருவதால் பிளாட்டை வலப்பக்க மையத்தில் காட்டு; mobile-ல் நடுவில் */
-    var fx=(window.innerWidth>600 && window.innerWidth*1>600)?0.72:0.5;
+    var mobile=window.innerWidth<=600;
+    var fx=mobile?0.5:0.72, fy=mobile?0.25:0.5;   /* mobile: tooltip கீழே வருவதால் பிளாட்டை மேல் பகுதியில் காட்டு */
+    wrapH=wrapper.clientHeight||wrapH;
     wrapper.scrollLeft=Math.max(0, pcx*spp-baseW*fx);
-    wrapper.scrollTop=Math.max(0, pcy*spp-wrapH/2);
+    wrapper.scrollTop=Math.max(0, pcy*spp-wrapH*fy);
     var wTop=wrapper.getBoundingClientRect().top+(window.scrollY||0);
     var searchH=(document.querySelector('.search-section')||{offsetHeight:0}).offsetHeight;
     window.scrollTo({top:Math.max(0,wTop-searchH-40), behavior:'smooth'});
     showTip(plotNum);
   },90);
-};
+}
 
 /* ================= SEARCH ================= */
 var _placeholders={
